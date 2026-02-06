@@ -60,7 +60,21 @@ public class Notification {
         return createdAt;
     }
 
+    
+
+     public void setMessage(String message) {
+        this.message = message;
+    }
+
+    public void setTargetRole(String targetRole) {
+        this.targetRole = targetRole;
+    }
+
     public void setRead(boolean read) {
         this.read = read;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

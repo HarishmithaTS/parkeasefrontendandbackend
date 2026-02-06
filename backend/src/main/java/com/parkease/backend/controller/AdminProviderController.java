@@ -20,10 +20,12 @@ public class AdminProviderController {
         this.service = service;
     }
 
-    /* ===== GET ALL PROVIDERS ===== */
+    /* =====================================================
+       GET ALL PROVIDERS (ADMIN APPROVAL LIST)
+       ===================================================== */
     @GetMapping
-    public List<AdminProviderResponse> getProviders() {
-        return service.getAllProviders();
+    public ResponseEntity<List<AdminProviderResponse>> getProviders() {
+        return ResponseEntity.ok(service.getAllProviders());
     }
 
     /* =====================================================
@@ -54,7 +56,7 @@ public class AdminProviderController {
     }
 
     /* =====================================================
-       REJECT PROVIDER
+       REJECT PROVIDER (DELETE)
        ===================================================== */
     @DeleteMapping("/{id}/reject")
     public ResponseEntity<Void> reject(@PathVariable Long id) {

@@ -1,9 +1,11 @@
 package com.parkease.backend.entity;
 
 import com.parkease.backend.enumtype.Role;
+import com.parkease.backend.enumtype.VerificationStatus;
 import jakarta.persistence.*;
-import java.util.*;
+
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -13,7 +15,9 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // ===== Common fields for ALL roles =====
+    /* =====================================================
+       COMMON FIELDS (ALL ROLES)
+       ===================================================== */
 
     @Column(nullable = false)
     private String fullName;
@@ -31,50 +35,102 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
-    // ===== Approval & status =====
+    /* =====================================================
+       APPROVAL & STATUS (CRITICAL)
+       ===================================================== */
 
     /**
-     * ADMIN  -> approved = true
-     * PROVIDER -> approved = false (until admin approves)
-     * DRIVER -> approved = true (for now)
+     * ADMIN   -> approved = true
+     * DRIVER  -> approved = true
+     * PROVIDER-> approved = false (until admin approves)
      */
     @Column(nullable = false)
     private boolean approved = false;
 
+    /**
+     * Used for suspend / deactivate
+     */
     @Column(nullable = false)
     private boolean enabled = true;
 
-    // ===== Audit =====
+    /**
+     * ADMIN verification lifecycle
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private VerificationStatus verificationStatus = VerificationStatus.PENDING;
+
+    /* =====================================================
+       PROVIDER VERIFICATION DETAILS
+       ===================================================== */
+
+    @Column
+    private String parkingAreaName;
+
+    @Column
+    private String location;
+
+    /**
+     * URL / path to ownership or lease document
+     */
+    @Column
+    private String ownershipDocumentUrl;
+
+    /**
+     * URL / path to government ID (Aadhar / PAN / etc.)
+     */
+    @Column
+    private String govtIdUrl;
+
+    /* =====================================================
+       RELATIONS
+       ===================================================== */
+
+    @OneToMany(mappedBy = "provider", cascade = CascadeType.ALL)
+    private List<ParkingLot> parkingLots;
+
+    /* =====================================================
+       AUDIT
+       ===================================================== */
 
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
-      @OneToMany(mappedBy = "provider", cascade = CascadeType.ALL)
-    private List<ParkingLot> parkingLots;
 
-    // ===== Constructors =====
+    /* =====================================================
+       CONSTRUCTORS
+       ===================================================== */
 
-    public User() {
-    }
+    public User() {}
 
     /**
      * Recommended constructor for registration
      */
-    public User(String fullName, String email, String phoneNumber, String password, Role role) {
+    public User(
+            String fullName,
+            String email,
+            String phoneNumber,
+            String password,
+            Role role
+    ) {
         this.fullName = fullName;
         this.email = email;
         this.phoneNumber = phoneNumber;
         this.password = password;
         this.role = role;
 
-        // 🔑 Role-based defaults
+        // 🔐 Role-based defaults
         if (role == Role.PROVIDER) {
             this.approved = false;
+            this.verificationStatus = VerificationStatus.PENDING;
         } else {
             this.approved = true; // ADMIN & DRIVER
+            this.verificationStatus = VerificationStatus.APPROVED;
         }
     }
 
-    // ===== Getters & Setters =====
+    /* =====================================================
+       GETTERS & SETTERS
+       ===================================================== */
 
     public Long getId() {
         return id;
@@ -83,7 +139,6 @@ public class User {
     public String getFullName() {
         return fullName;
     }
- 
     public void setFullName(String fullName) {
         this.fullName = fullName;
     }
@@ -91,7 +146,6 @@ public class User {
     public String getEmail() {
         return email;
     }
- 
     public void setEmail(String email) {
         this.email = email;
     }
@@ -99,7 +153,6 @@ public class User {
     public String getPhoneNumber() {
         return phoneNumber;
     }
- 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
     }
@@ -107,7 +160,6 @@ public class User {
     public String getPassword() {
         return password;
     }
- 
     public void setPassword(String password) {
         this.password = password;
     }
@@ -115,7 +167,6 @@ public class User {
     public Role getRole() {
         return role;
     }
- 
     public void setRole(Role role) {
         this.role = role;
     }
@@ -123,7 +174,6 @@ public class User {
     public boolean isApproved() {
         return approved;
     }
- 
     public void setApproved(boolean approved) {
         this.approved = approved;
     }
@@ -131,14 +181,49 @@ public class User {
     public boolean isEnabled() {
         return enabled;
     }
- 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public VerificationStatus getVerificationStatus() {
+        return verificationStatus;
+    }
+    public void setVerificationStatus(VerificationStatus verificationStatus) {
+        this.verificationStatus = verificationStatus;
+    }
+
+    public String getParkingAreaName() {
+        return parkingAreaName;
+    }
+    public void setParkingAreaName(String parkingAreaName) {
+        this.parkingAreaName = parkingAreaName;
+    }
+
+    public String getLocation() {
+        return location;
+    }
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    public String getOwnershipDocumentUrl() {
+        return ownershipDocumentUrl;
+    }
+    public void setOwnershipDocumentUrl(String ownershipDocumentUrl) {
+        this.ownershipDocumentUrl = ownershipDocumentUrl;
+    }
+
+    public String getGovtIdUrl() {
+        return govtIdUrl;
+    }
+    public void setGovtIdUrl(String govtIdUrl) {
+        this.govtIdUrl = govtIdUrl;
     }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
+
     public List<ParkingLot> getParkingLots() {
         return parkingLots;
     }

@@ -1,5 +1,6 @@
 package com.parkease.backend.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import com.parkease.backend.dto.AdminProviderResponse;
 import com.parkease.backend.entity.Notification;
 import com.parkease.backend.entity.User;
 import com.parkease.backend.enumtype.Role;
+import com.parkease.backend.enumtype.VerificationStatus;
 import com.parkease.backend.repository.NotificationRepository;
 import com.parkease.backend.repository.UserRepository;
 
@@ -27,7 +29,9 @@ public class AdminProviderService {
         this.notificationRepository = notificationRepository;
     }
 
-    /* ================= GET ALL PROVIDERS ================= */
+    /* =====================================================
+       GET ALL PROVIDERS (ADMIN DASHBOARD)
+       ===================================================== */
     public List<AdminProviderResponse> getAllProviders() {
         return userRepository.findByRole(Role.PROVIDER)
                 .stream()
@@ -35,66 +39,85 @@ public class AdminProviderService {
                 .toList();
     }
 
-    /* ================= APPROVE PROVIDER ================= */
+    /* =====================================================
+       APPROVE PROVIDER
+       ===================================================== */
     public void approveProvider(Long id) {
         User provider = getProvider(id);
 
+        // ✅ Approval criteria (professional)
+        if (provider.getParkingAreaName() == null ||
+            provider.getLocation() == null ||
+            provider.getOwnershipDocumentUrl() == null ||
+            provider.getGovtIdUrl() == null) {
+
+            throw new RuntimeException(
+                "Provider documents or parking details are incomplete"
+            );
+        }
+
         provider.setApproved(true);
         provider.setEnabled(true);
+        provider.setVerificationStatus(VerificationStatus.APPROVED);
         userRepository.save(provider);
 
-        notificationRepository.save(
-                new Notification(
-                        "Your provider account has been approved by admin.",
-                        "PROVIDER"
-                )
+        createNotification(
+                "Your provider account has been approved by admin.",
+                "PROVIDER"
         );
     }
 
-    /* ================= SUSPEND PROVIDER ================= */
+    /* =====================================================
+       SUSPEND PROVIDER
+       ===================================================== */
     public void suspendProvider(Long id) {
         User provider = getProvider(id);
 
         provider.setEnabled(false);
+        provider.setVerificationStatus(VerificationStatus.SUSPENDED);
         userRepository.save(provider);
 
-        notificationRepository.save(
-                new Notification(
-                        "Your provider account has been suspended by admin.",
-                        "PROVIDER"
-                )
+        createNotification(
+                "Your provider account has been suspended by admin.",
+                "PROVIDER"
         );
     }
 
-    /* ================= REACTIVATE PROVIDER ================= */
+    /* =====================================================
+       REACTIVATE PROVIDER
+       ===================================================== */
     public void reactivateProvider(Long id) {
         User provider = getProvider(id);
 
         provider.setEnabled(true);
+        provider.setVerificationStatus(VerificationStatus.APPROVED);
         userRepository.save(provider);
 
-        notificationRepository.save(
-                new Notification(
-                        "Your provider account has been reactivated.",
-                        "PROVIDER"
-                )
+        createNotification(
+                "Your provider account has been reactivated by admin.",
+                "PROVIDER"
         );
     }
 
-    /* ================= REJECT PROVIDER ================= */
+    /* =====================================================
+       REJECT PROVIDER
+       ===================================================== */
     public void rejectProvider(Long id) {
         User provider = getProvider(id);
+
+        provider.setVerificationStatus(VerificationStatus.REJECTED);
         userRepository.delete(provider);
 
-        notificationRepository.save(
-                new Notification(
-                        "A provider application was rejected and removed.",
-                        "ADMIN"
-                )
+        createNotification(
+                "A provider application was rejected by admin.",
+                "ADMIN"
         );
     }
 
-    /* ================= HELPERS ================= */
+    /* =====================================================
+       HELPERS
+       ===================================================== */
+
     private User getProvider(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Provider not found"));
@@ -103,6 +126,16 @@ public class AdminProviderService {
             throw new RuntimeException("User is not a provider");
         }
         return user;
+    }
+
+    private void createNotification(String message, String targetRole) {
+        Notification notification = new Notification();
+        notification.setMessage(message);
+        notification.setTargetRole(targetRole);
+        notification.setRead(false);
+        notification.setCreatedAt(LocalDateTime.now());
+
+        notificationRepository.save(notification);
     }
 
     private AdminProviderResponse mapToDto(User u) {

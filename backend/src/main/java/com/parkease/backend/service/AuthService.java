@@ -4,11 +4,14 @@ import com.parkease.backend.config.JwtService;
 import com.parkease.backend.dto.AuthResponse;
 import com.parkease.backend.dto.LoginRequest;
 import com.parkease.backend.dto.RegisterRequest;
+import com.parkease.backend.entity.Notification;
 import com.parkease.backend.entity.User;
 import com.parkease.backend.entity.VerificationToken;
 import com.parkease.backend.enumtype.Role;
+import com.parkease.backend.repository.NotificationRepository;
 import com.parkease.backend.repository.UserRepository;
 import com.parkease.backend.repository.VerificationTokenRepository;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,6 +29,9 @@ public class AuthService {
     private VerificationTokenRepository verificationTokenRepository;
 
     @Autowired
+    private NotificationRepository notificationRepository; // 🔔 ADDED
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -34,8 +40,9 @@ public class AuthService {
     @Autowired
     private EmailService emailService;
 
-    /* ================= REGISTER ================= */
-
+    /* =====================================================
+       REGISTER
+       ===================================================== */
     public AuthResponse register(RegisterRequest request) {
 
         if (userRepository.existsByEmail(request.getEmail())) {
@@ -50,13 +57,15 @@ public class AuthService {
             throw new RuntimeException("Passwords do not match");
         }
 
-    if (request.getRole() == Role.ADMIN) {
-    long adminCount = userRepository.countByRole(Role.ADMIN);
-    if (adminCount >= 1) {
-        throw new RuntimeException("Admin already exists");
-    }
-}
+        /* 🔒 Allow only ONE admin */
+        if (request.getRole() == Role.ADMIN) {
+            long adminCount = userRepository.countByRole(Role.ADMIN);
+            if (adminCount >= 1) {
+                throw new RuntimeException("Admin already exists");
+            }
+        }
 
+        /* 🅿️ Provider mandatory details */
         if (request.getRole() == Role.PROVIDER) {
             if (request.getParkingAreaName() == null ||
                 request.getLocation() == null) {
@@ -71,50 +80,94 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole());
 
+        /* 🔑 Approval logic */
         if (request.getRole() == Role.PROVIDER) {
-            user.setApproved(false);
+            user.setApproved(false);   // Admin approval required
+            user.setEnabled(true);
         } else {
-            user.setApproved(true);
+            user.setApproved(true);    // ADMIN & DRIVER auto-approved
+            user.setEnabled(true);
         }
 
         userRepository.save(user);
 
-        if (request.getRole() == Role.PROVIDER) {
-            return new AuthResponse("Registered successfully. Await admin approval.");
+        /* 🔔 NOTIFY ADMIN ON REGISTRATION */
+        if (request.getRole() == Role.PROVIDER || request.getRole() == Role.DRIVER) {
+            Notification notification = new Notification();
+            notification.setMessage(
+                    "New " + request.getRole().name().toLowerCase()
+                    + " registered: " + user.getFullName()
+            );
+            notification.setTargetRole("ADMIN");
+            notification.setRead(false);
+            notification.setCreatedAt(LocalDateTime.now());
+
+            notificationRepository.save(notification);
         }
 
-        return new AuthResponse("Registered successfully. You can login now.");
+        /* 📩 RESPONSE */
+        if (request.getRole() == Role.PROVIDER) {
+            return AuthResponse.builder()
+                    .message("Registered successfully. Await admin approval.")
+                    .build();
+        }
+
+        return AuthResponse.builder()
+                .message("Registered successfully. You can login now.")
+                .build();
     }
 
-    /* ================= LOGIN ================= */
-
+    /* =====================================================
+       LOGIN
+       ===================================================== */
     public AuthResponse login(LoginRequest request) {
 
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() ->
-                        new RuntimeException("Invalid email or password"));
+                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
 
-        if (!user.isEnabled()) {
-            throw new RuntimeException("Account is disabled");
-        }
-
-        if (user.getRole() == Role.PROVIDER && !user.isApproved()) {
-            throw new RuntimeException("Provider not approved by admin");
-        }
-
-        if (!passwordEncoder.matches(
-                request.getPassword(), user.getPassword())) {
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new RuntimeException("Invalid email or password");
         }
 
-        // ✅ CORRECT TOKEN GENERATION
-       String token = jwtService.generateToken(user);
-return new AuthResponse(token, user.getRole().name());
+        /* =====================================================
+           PROVIDER APPROVAL ENFORCEMENT
+           ===================================================== */
+        if (user.getRole() == Role.PROVIDER) {
 
+            if (!user.isApproved()) {
+                throw new RuntimeException(
+                        "Your provider account is awaiting admin approval."
+                );
+            }
+
+            if (!user.isEnabled()) {
+                throw new RuntimeException(
+                        "Your provider account has been suspended by admin."
+                );
+            }
+        }
+
+        /* =====================================================
+           ACCOUNT ENABLE CHECK
+           ===================================================== */
+        if (!user.isEnabled()) {
+            throw new RuntimeException("Your account is disabled");
+        }
+
+        /* =====================================================
+           GENERATE TOKEN
+           ===================================================== */
+        String token = jwtService.generateToken(user);
+
+        return AuthResponse.builder()
+                .token(token)
+                .role(user.getRole().name())
+                .build();
     }
 
-    /* ================= FORGOT PASSWORD ================= */
-
+    /* =====================================================
+       FORGOT PASSWORD
+       ===================================================== */
     public void sendResetOtp(String email) {
 
         User user = userRepository.findByEmail(email)
@@ -136,8 +189,9 @@ return new AuthResponse(token, user.getRole().name());
         emailService.sendOtpEmail(user.getEmail(), otp);
     }
 
-    /* ================= RESET PASSWORD ================= */
-
+    /* =====================================================
+       RESET PASSWORD
+       ===================================================== */
     public void resetPassword(String email, String otp, String newPassword) {
 
         User user = userRepository.findByEmail(email)
